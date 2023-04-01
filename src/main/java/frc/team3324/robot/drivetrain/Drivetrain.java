@@ -4,14 +4,11 @@
 
 package frc.team3324.robot.drivetrain;
 
-
-
 import org.littletonrobotics.junction.Logger;
 
 import com.kauailabs.navx.frc.AHRS;
 import com.pathplanner.lib.PathPlannerTrajectory;
 import com.pathplanner.lib.commands.PPRamseteCommand;
-
 
 import edu.wpi.first.math.VecBuilder;
 import edu.wpi.first.math.controller.PIDController;
@@ -26,14 +23,12 @@ import edu.wpi.first.math.kinematics.DifferentialDriveOdometry;
 import edu.wpi.first.math.kinematics.DifferentialDriveWheelSpeeds;
 import edu.wpi.first.wpilibj.SPI;
 import edu.wpi.first.wpilibj.drive.DifferentialDrive;
-import edu.wpi.first.wpilibj.drive.DifferentialDrive.WheelSpeeds;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
-import frc.team3324.library.motorcontrollers.SmartMotionSparkMAX;
 import frc.team3324.robot.util.Constants;
 import frc.team6300.NorthwoodDrivers.LoggedMotorIOInputsAutoLogged;
-
+import frc.team6300.NorthwoodDrivers.LoggedNeo;
 
 public class Drivetrain extends SubsystemBase {
   // --- DRIVETRAIN MOTORS ---
@@ -46,12 +41,12 @@ public class Drivetrain extends SubsystemBase {
    * lbMotor = left back motor
    */
 
-  private static SmartMotionSparkMAX rfMotor = Constants.Drivetrain.RIGHT_FRONT_MOTOR;
-  private static SmartMotionSparkMAX rmMotor = Constants.Drivetrain.RIGHT_MIDDLE_MOTOR;
-  private static SmartMotionSparkMAX rbMotor = Constants.Drivetrain.RIGHT_BACK_MOTOR;
-  private static SmartMotionSparkMAX lfMotor = Constants.Drivetrain.LEFT_FRONT_MOTOR;
-  private static SmartMotionSparkMAX lmMotor = Constants.Drivetrain.LEFT_MIDDLE_MOTOR;
-  private static SmartMotionSparkMAX lbMotor = Constants.Drivetrain.LEFT_BACK_MOTOR;
+  private static LoggedNeo rfMotor = Constants.Drivetrain.RIGHT_FRONT_MOTOR;
+  private static LoggedNeo rmMotor = Constants.Drivetrain.RIGHT_MIDDLE_MOTOR;
+  private static LoggedNeo rbMotor = Constants.Drivetrain.RIGHT_BACK_MOTOR;
+  private static LoggedNeo lfMotor = Constants.Drivetrain.LEFT_FRONT_MOTOR;
+  private static LoggedNeo lmMotor = Constants.Drivetrain.LEFT_MIDDLE_MOTOR;
+  private static LoggedNeo lbMotor = Constants.Drivetrain.LEFT_BACK_MOTOR;
 
   private static LoggedMotorIOInputsAutoLogged rmMotorLog = new LoggedMotorIOInputsAutoLogged();
   private static LoggedMotorIOInputsAutoLogged rfMotorLog = new LoggedMotorIOInputsAutoLogged();
@@ -67,8 +62,7 @@ public class Drivetrain extends SubsystemBase {
   private DifferentialDriveKinematics driveKinematics = new DifferentialDriveKinematics(0.7112);
 
   // --- PID CONTROL ---
-  private PIDController PIDControlYaw = new PIDController(0.008, 0.0001, 0.001);
-  private PIDController PIDControlPitch = new PIDController(0, 0, 0);
+  private PIDController PIDControl = new PIDController(0.22974, 0, 0.1);
   private SimpleMotorFeedforward FeedforwardDT = new SimpleMotorFeedforward(0.59019, 0.038769, 0.0049377);
  
   private static DifferentialDrive drive = new DifferentialDrive(lmMotor.getMotorObject(), rmMotor.getMotorObject());
@@ -76,16 +70,15 @@ public class Drivetrain extends SubsystemBase {
   /** Creates a new Drivetrain. */
   public Drivetrain() {
     // set followers
-    rfMotor.follow(rmMotor.getMotor());
-    rbMotor.follow(rmMotor.getMotor());
+    rfMotor.setSlave(rmMotor.getMotorObject());
+    rbMotor.setSlave(rmMotor.getMotorObject());
 
-    lfMotor.follow(lmMotor.getMotor());
-    lbMotor.follow(lmMotor.getMotor()); 
+    lfMotor.setSlave(lmMotor.getMotorObject());
+    lbMotor.setSlave(lmMotor.getMotorObject()); 
     
     resetEncoders();
     navX.reset();
 
-   
     var nativeCovMatrix = VecBuilder.fill(0.02, 0.02, 0.01);
     
     var visionCovMatrix = VecBuilder.fill(0.1, 0.1, 0.1);
@@ -113,18 +106,8 @@ public class Drivetrain extends SubsystemBase {
     rmMotor.setPercentOutput(rV/12);
   }
 
-  public void setPIDYawTolerance(double tolerance) {
-    PIDControlYaw.setTolerance(tolerance);
-  }
-
-  public void setPIDPitchTolerance(double tolerance) {
-    PIDControlPitch.setTolerance(tolerance);
-  }
-
-  public void setPitchPID(double kP, double kI, double kD) {
-    PIDControlPitch.setP(kP);
-    PIDControlPitch.setI(kI);
-    PIDControlPitch.setD(kD);
+  public void setPIDTolerance(double tolerance) {
+    PIDControl.setTolerance(tolerance);
   }
 
   public double getLeftEncoderPosition() {
@@ -141,6 +124,10 @@ public class Drivetrain extends SubsystemBase {
 
   public double getGyroAngle() {
     return navX.getAngle();
+  }
+
+  public double getGyroHeading() {
+    return navX.getCompassHeading();
   }
 
   public double getGyroAngle360() {
@@ -194,44 +181,35 @@ public class Drivetrain extends SubsystemBase {
   public DifferentialDriveOdometry getOdometry() {
     return this.driveOdometry;
   }
+
   public void setKnownPose(Pose2d knownPose){
     driveOdometry.resetPosition(Rotation2d.fromDegrees(-getGyroAngle()), lbMotor.getRotations(), rmMotor.getRotations(), knownPose);
   }
 
-  public Command FollowPath(PathPlannerTrajectory path, Drivetrain m_drive){
-        PPRamseteCommand pathFollowCommand = 
-        new PPRamseteCommand( 
-            path, 
-            m_drive:: getPose,
-            new RamseteController(
-            Constants.Drivetrain.ramseteD,
-            Constants.Drivetrain.ramseteZ), 
-            m_drive.getKinematics(), 
-            m_drive:: acceptWheelSpeeds, 
-            true,
-            m_drive
-            );
-        return pathFollowCommand;
+  public Command followPath(PathPlannerTrajectory path){
+    return new PPRamseteCommand( 
+      path, 
+      this::getPose,
+      new RamseteController(
+      Constants.Drivetrain.ramseteD,
+      Constants.Drivetrain.ramseteZ), 
+      this.getKinematics(), 
+      this:: acceptWheelSpeeds, 
+      true,
+      this
+    );
   }
 
   public double getDistance(){
     return driveKinematics.toTwist2d(lmMotor.getPosition(), rmMotor.getPosition()).dx;
   }
 
-  public PIDController getPIDYaw() {
-    return this.PIDControlYaw;
+  public PIDController getPID() {
+    return this.PIDControl;
   }
 
-  public double getPIDYawSpeed(double setpoint) {
-    return PIDControlYaw.calculate(getGyroYaw(), setpoint);
-  }
-
-  public double getPIDPitchSpeed(double setpoint) {
-    return PIDControlPitch.calculate(getGyroPitch(), setpoint);
-  }
-
-  public boolean pitchAtSetpoint() {
-    return PIDControlPitch.atSetpoint();
+  public double getPIDSpeed(double setpoint) {
+    return PIDControl.calculate(getGyroYaw(), setpoint);
   }
 
   public SimpleMotorFeedforward getFeedforward() {
@@ -275,6 +253,5 @@ public class Drivetrain extends SubsystemBase {
 
     driveOdometry.update(Rotation2d.fromDegrees(getGyroAngle()), getWheelSpeeds().leftMetersPerSecond, getWheelSpeeds().rightMetersPerSecond);
     drivePoseEstimator.update(Rotation2d.fromDegrees(getGyroAngle()), getWheelSpeeds().leftMetersPerSecond, getWheelSpeeds().rightMetersPerSecond);
-
   }
 }

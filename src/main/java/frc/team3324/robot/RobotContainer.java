@@ -7,16 +7,20 @@ package frc.team3324.robot;
 import frc.team3324.robot.arm.Arm;
 import frc.team3324.robot.arm.commands.ControlArm;
 import frc.team3324.robot.arm.commands.TelescopeArm;
-import frc.team3324.robot.auto.GoToChargingStation;
+import frc.team3324.robot.auto.ScoreTwoGetOneBalance;
+import frc.team3324.robot.auto.commands.ScoreCubeHigh;
 import frc.team3324.robot.drivetrain.Drivetrain;
+import frc.team3324.robot.drivetrain.commands.AutoBalance;
 import frc.team3324.robot.drivetrain.commands.Drive;
-import frc.team3324.robot.drivetrain.commands.GyroTurn;
 import frc.team3324.robot.intake.Intake;
 import frc.team3324.robot.intake.commands.IntakeCone;
 import frc.team3324.robot.intake.commands.IntakeCube;
 import frc.team3324.robot.vision.Vision;
 import frc.team3324.robot.vision.commands.AlignWithVision;
 import frc.team3324.robot.vision.commands.MoveArmWithVision;
+
+import java.util.HashMap;
+
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 // import frc.team3324.robot.arm.commands.TelescopeArm;
@@ -43,6 +47,9 @@ public class RobotContainer {
   private static Intake intake = new Intake();
   private static Vision vision = new Vision();
 
+  // --- PATHPLANNER AUTO EVENT MAP ---
+  public static HashMap<String, Command> eventMap = new HashMap<>();
+
   // private NetworkTableInstance nt_instance = NetworkTableInstance.getDefault();
 
   /** The container for the robot. Contains subsystems, OI devices, and commands. */
@@ -50,25 +57,30 @@ public class RobotContainer {
     // Configure the trigger bindings
     configureBindings();
    
-
+    eventMap.putIfAbsent("ScoreCubeHigh", new ScoreCubeHigh(arm, intake));
+    eventMap.putIfAbsent("IntakeCube", new IntakeCube(intake, 0));
+    eventMap.putIfAbsent("ScoreCubeMid", new ScoreCubeHigh(arm, intake));
+    eventMap.putIfAbsent("AutoBalance", new AutoBalance(drivetrain));
   }
 
   private void configureBindings() {
     // --- DEFAULT COMMANDS ---
     drivetrain.setDefaultCommand(new Drive(drivetrain, primaryDriver::getLeftTriggerAxis, primaryDriver::getRightTriggerAxis, primaryDriver::getLeftX));
     arm.setDefaultCommand(new ControlArm(arm, secondaryDriver::getLeftY));
-    primaryDriver.y().whileTrue(new GyroTurn(drivetrain, 90));
-    primaryDriver.b().whileTrue(new AlignWithVision(vision, drivetrain));
-    primaryDriver.a().whileTrue(new MoveArmWithVision(vision, drivetrain, arm));
+
+    // --- VISION COMMANDS ---
+    primaryDriver.x().whileTrue(new AlignWithVision(vision, drivetrain));
+    // primaryDriver.y().whileTrue(new MoveArmWithVision(vision, drivetrain, arm));
+
+    // --- INTAKE COMMANDS --- 
     secondaryDriver.rightTrigger().whileTrue(new IntakeCone(intake, 0.2));
     secondaryDriver.leftTrigger().whileTrue(new IntakeCone(intake, -0.2));
-    secondaryDriver.leftBumper().whileTrue(new IntakeCube(intake, -0.5));
-    secondaryDriver.rightBumper().whileTrue(new IntakeCube(intake, 0.5));
+    secondaryDriver.leftBumper().whileTrue(new IntakeCube(intake, -1.0));
+    secondaryDriver.rightBumper().whileTrue(new IntakeCube(intake, 0.45));
+
+    // --- TELESCOPE COMMANDS ---
     secondaryDriver.b().whileTrue(new TelescopeArm(arm, 1.0));
     secondaryDriver.a().whileTrue(new TelescopeArm(arm, -1.0));
-    // primaryDriver.rightBumper().whileTrue(new IntakeCone(intake, 0.1));
-    // primaryDriver.leftBumper().whileTrue(new IntakeCone(intake, -0.1));
-
   }
 
   /**
@@ -78,7 +90,6 @@ public class RobotContainer {
    */
   public Command getAutonomousCommand() {
     // An example command will be run in autonomous
-    return null;
-
+    return new ScoreTwoGetOneBalance(drivetrain);
   }
 }
